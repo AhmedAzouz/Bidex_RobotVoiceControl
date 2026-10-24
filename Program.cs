@@ -80,9 +80,9 @@ app.MapPost("/api/connect", async (ConnectRequest request, RobotSerialService se
 }
 );
 
-app.MapPost("/api/disconnect", (RobotSerialService serial) =>
+app.MapPost("/api/disconnect", async (RobotSerialService serial, CancellationToken ct) =>
 {
-    serial.Disconnect();
+    await serial.DisconnectWithByeAsync(ct);
     return Results.Ok(new { messageAr = "تم فصل الاتصال التسلسلي." });
 });
 
@@ -301,6 +301,60 @@ app.MapPost("/api/execute", async (ExecuteRequest request, RobotSerialService se
     }
 });
 
+// Direct fixed-action endpoint for the on-screen buttons. The button text is a
+// known action key, so there is no language to interpret: Ollama is bypassed
+// entirely and the serial lines are built here from the calibrated settings.
+// Only the keys in this allow-list can ever be sent; anything else is rejected.
+app.MapPost("/api/command", async (CommandRequest request, IConfiguration config, RobotSerialService serial, CancellationToken ct) =>
+{
+    var action = (request.Action ?? string.Empty).Trim().ToLowerInvariant();
+    var robot = config.GetSection("Robot");
+    var openAngle = robot.GetValue<int>("GripperOpenAngle", 170);
+    var closeAngle = robot.GetValue<int>("GripperClosedAngle", 100);
+    var homeWrist = robot.GetValue<int>("HomeWristAngle", 90);
+    var homeElbow = robot.GetValue<int>("HomeElbowAngle", 90);
+    var homeGripper = robot.GetValue<int>("HomeGripperAngle", 130);
+    var wristTest = robot.GetValue<int>("WristTestAngle", 120);
+    var elbowTest = robot.GetValue<int>("ElbowTestAngle", 120);
+
+    var lines = new List<string>();
+    string messageAr;
+    switch (action)
+    {
+        case "wrist_test": lines.Add($"w {wristTest}"); messageAr = $"اختبار المعصم إلى {wristTest} درجة."; break;
+        case "elbow_test": lines.Add($"e {elbowTest}"); messageAr = $"اختبار الكوع إلى {elbowTest} درجة."; break;
+        case "gripper_open": lines.Add($"g {openAngle}"); messageAr = "فتح اليد."; break;
+        case "gripper_close": lines.Add($"g {closeAngle}"); messageAr = "إغلاق اليد."; break;
+        case "home":
+            lines.Add($"w {homeWrist}");
+            lines.Add($"e {homeElbow}");
+            lines.Add($"g {homeGripper}");
+            messageAr = "وضع البداية.";
+            break;
+        case "random_start": lines.Add("A"); messageAr = "بدء الحركة العشوائية."; break;
+        case "random_stop": lines.Add("X"); messageAr = "إيقاف الحركة العشوائية."; break;
+        default:
+            return Results.BadRequest(new { messageAr = "أمر غير معروف." });
+    }
+
+    if (!serial.GetStatus().Connected)
+        return Results.Conflict(new { messageAr = "لا يوجد اتصال بالـ NodeMCU؛ لم يُرسل أي أمر." });
+
+    try
+    {
+        foreach (var line in lines)
+        {
+            await serial.SendLineAsync(line, ct);
+            await Task.Delay(40, ct);
+        }
+        return Results.Ok(new { messageAr, serialLines = lines });
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {
+        return Results.Problem(title: "Serial write failed", detail: $"تعذر إرسال الأمر عبر USB Serial: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+});
+
 app.Run();
 
 static string ExtractJsonObject(string input)
@@ -317,34 +371,12 @@ public sealed class RobotSerialService : IDisposable
     private readonly object _gate = new();
     private SerialPort? _port;
     private readonly int _baudRate;
-    private readonly int _heartbeatIntervalMs;
     private string _lastDeviceMessage = "لم تصل رسائل من الجهاز بعد.";
     private readonly StringBuilder _receiveBuffer = new();
-    private readonly System.Threading.Timer _heartbeatTimer;
 
     public RobotSerialService(IConfiguration config)
     {
         _baudRate = config.GetValue<int>("Robot:SerialBaudRate", 115200);
-        _heartbeatIntervalMs = Math.Clamp(config.GetValue<int>("Robot:HeartbeatIntervalMs", 1000), 250, 2500);
-        // Sends an empty line to the board on a fixed cadence while connected.
-        // The firmware treats any byte as proof the host is alive and ignores
-        // the empty line, so random mode keeps running normally over a healthy
-        // link and self-stops only when this cadence actually stops arriving.
-        _heartbeatTimer = new System.Threading.Timer(_ => SendHeartbeat(), null,
-            Timeout.Infinite, Timeout.Infinite);
-    }
-
-    private void SendHeartbeat()
-    {
-        lock (_gate)
-        {
-            if (_port?.IsOpen != true) return;
-            try { _port.Write("\n"); }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException or UnauthorizedAccessException)
-            {
-                // The port may have been unplugged; the DataReceived/connect paths handle recovery.
-            }
-        }
     }
 
     public string[] ListPorts() => SerialPort.GetPortNames().OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -381,11 +413,15 @@ public sealed class RobotSerialService : IDisposable
             _port = port;
             _lastDeviceMessage = $"اتصال مفتوح على {portName}.";
             _receiveBuffer.Clear();
-            _heartbeatTimer.Change(_heartbeatIntervalMs, _heartbeatIntervalMs);
         }
 
         // Many ESP8266 boards reset when the serial port is opened.
         await Task.Delay(1800, ct);
+
+        // Greet on connect. If the board reset on open it already played its boot
+        // welcome; this covers the case where it did not reset.
+        try { await SendLineAsync("H", ct); }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException) { }
     }
 
     public Task SendLineAsync(string line, CancellationToken ct)
@@ -403,6 +439,22 @@ public sealed class RobotSerialService : IDisposable
     public void Disconnect()
     {
         lock (_gate) ClosePortUnsafe();
+    }
+
+    // Sends the farewell command and gives the board time to play the tone
+    // before the port is actually closed, then closes it.
+    public async Task DisconnectWithByeAsync(CancellationToken ct)
+    {
+        try
+        {
+            await SendLineAsync("B", ct);
+            await Task.Delay(400, ct);  // let SOUND_BYE finish before the link drops
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException) { }
+        finally
+        {
+            lock (_gate) ClosePortUnsafe();
+        }
     }
 
     private void OnDataReceived(object sender, SerialDataReceivedEventArgs e)
@@ -432,7 +484,6 @@ public sealed class RobotSerialService : IDisposable
 
     private void ClosePortUnsafe()
     {
-        _heartbeatTimer.Change(Timeout.Infinite, Timeout.Infinite);
         if (_port is null) return;
         try
         {
@@ -449,13 +500,13 @@ public sealed class RobotSerialService : IDisposable
     public void Dispose()
     {
         lock (_gate) ClosePortUnsafe();
-        _heartbeatTimer.Dispose();
     }
 }
 
 public sealed record ConnectRequest(string? PortName);
 public sealed record InterpretRequest(string? Transcript);
 public sealed record ExecuteRequest(string? PendingId);
+public sealed record CommandRequest(string? Action);
 public sealed record SerialStatus(bool Connected, string? PortName, int BaudRate, string LastDeviceMessage);
 public sealed record PendingCommand(List<string> SerialLines, string Intent, DateTimeOffset ExpiresAt);
 public sealed record InterpretResponse(Guid? PendingId, string Transcript, string Intent, int? Angle, string MessageAr, IReadOnlyList<string> SerialLines);

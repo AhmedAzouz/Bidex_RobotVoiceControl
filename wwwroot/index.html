@@ -357,13 +357,15 @@
                 <p class="small">لأول تجربة، اترك هذا الخيار مغلقًا. أوامر الزوايا والأوامر المسموحة فقط هي التي يمكن إرسالها.</p>
                 <button class="primary" id="executeBtn" disabled style="margin-top:10px">نفّذ الأمر على الروبوت</button>
                 <div class="status" id="actionStatus">بانتظار أمر.</div>
+                <p class="small" style="margin-top:14px;color:var(--muted)">أزرار مباشرة — تُنفَّذ فورًا على الروبوت دون المرور على Ollama:</p>
                 <div class="commands">
-                    <button data-text="حرّك المعصم إلى 120 درجة">اختبار المعصم</button>
-                    <button data-text="حرّك الكوع إلى 120 درجة">اختبار الكوع</button>
-                    <button data-text="افتح اليد">افتح اليد</button>
-                    <button data-text="اقفل اليد">اقفل اليد</button>
-                    <button data-text="ارجع إلى وضع البداية">وضع البداية</button>
-                    <button data-text="أوقف الحركة العشوائية">إيقاف عشوائي</button>
+                    <button data-action="wrist_test">اختبار المعصم</button>
+                    <button data-action="elbow_test">اختبار الكوع</button>
+                    <button data-action="gripper_open">افتح اليد</button>
+                    <button data-action="gripper_close">اقفل اليد</button>
+                    <button data-action="home">وضع البداية</button>
+                    <button data-action="random_start">حركة عشوائية</button>
+                    <button data-action="random_stop">إيقاف عشوائي</button>
                 </div>
             </section>
         </div>
@@ -373,8 +375,30 @@
         (() => {
             const $ = id => document.getElementById(id);
             let pendingId = null;
+            let pendingIntent = null;
             let recognition = null;
             let listening = false;
+
+            // Sound map (event -> audio file under wwwroot). Loaded once at startup.
+            // A missing manifest or a missing/empty entry simply means no sound — never
+            // an error. Add a sound later by dropping a file in wwwroot/sounds/ and
+            // pointing its event key at it in sounds/manifest.json.
+            let soundMap = {};
+            async function loadSoundMap() {
+                try {
+                    const response = await fetch('sounds/manifest.json', { cache: 'no-store' });
+                    if (response.ok) soundMap = await response.json();
+                } catch { /* no manifest yet — sounds stay silent */ }
+            }
+
+            function playSound(key) {
+                const src = key && soundMap[key];
+                if (!src) return;  // no entry or empty -> silent, by design
+                try {
+                    const audio = new Audio(src);
+                    audio.play().catch(() => { /* autoplay blocked or file missing — ignore */ });
+                } catch { /* ignore */ }
+            }
 
             function setStatus(id, text, kind = '') {
                 const node = $(id);
@@ -401,6 +425,7 @@
 
             function setPending(data) {
                 pendingId = data.pendingId || null;
+                pendingIntent = data.intent || null;
                 const executeButton = $('executeBtn');
                 executeButton.disabled = !pendingId;
                 if (!pendingId) {
@@ -438,15 +463,30 @@
                 }
             }
 
+            async function directCommand(action) {
+                // Fixed-action buttons: send straight to the robot, bypassing Ollama.
+                setStatus('actionStatus', 'يرسل الأمر المباشر إلى الروبوت…');
+                try {
+                    const data = await api('/api/command', 'POST', { action });
+                    setStatus('actionStatus', data.messageAr || 'تم إرسال الأمر.', 'good');
+                    playSound(action);  // after the command reached the robot
+                    await refreshStatus();
+                } catch (error) {
+                    setStatus('actionStatus', error.message, 'bad');
+                }
+            }
+
             async function executePending() {
                 if (!pendingId) return;
                 const id = pendingId;
+                const intent = pendingIntent;
                 pendingId = null;
                 $('executeBtn').disabled = true;
                 setStatus('actionStatus', 'يرسل الأمر إلى NodeMCU عبر USB…');
                 try {
                     const data = await api('/api/execute', 'POST', { pendingId: id });
                     setStatus('actionStatus', data.messageAr || 'تم إرسال الأمر.', 'good');
+                    playSound(intent);  // voice path: keyed by the understood intent
                     await refreshStatus();
                 } catch (error) {
                     setStatus('actionStatus', error.message, 'bad');
@@ -564,8 +604,9 @@
             $('interpretBtn').addEventListener('click', () => interpret($('manualText').value));
             $('manualText').addEventListener('keydown', event => { if (event.key === 'Enter') interpret($('manualText').value); });
             $('executeBtn').addEventListener('click', executePending);
-            document.querySelectorAll('[data-text]').forEach(button => button.addEventListener('click', () => interpret(button.dataset.text)));
+            document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => directCommand(button.dataset.action)));
             $('accessKey').addEventListener('change', refreshPorts);
+            loadSoundMap();
             refreshPorts();
             setInterval(refreshStatus, 2500);
         })();

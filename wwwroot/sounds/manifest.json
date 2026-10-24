@@ -1,0 +1,24 @@
+{
+  "_comment": "خريطة الأصوات: المفتاح = الحدث، القيمة = مسار ملف الصوت داخل wwwroot. قيمة فارغة تعني لا صوت بعد (تُتجاهل بصمت). أضف صوتًا مستقبلًا بوضع الملف في wwwroot/sounds/ وكتابة مساره هنا. المفاتيح تغطي أسماء الأزرار المباشرة وأسماء النوايا الصوتية معًا.",
+
+  "random_start": "sounds/yesboss.mp3",
+  "start_random": "sounds/yesboss.mp3",
+
+  "random_stop": "",
+  "stop_random": "",
+
+  "wrist_test": "",
+  "move_wrist": "",
+
+  "elbow_test": "",
+  "move_elbow": "",
+
+  "gripper_open": "",
+  "open_gripper": "",
+
+  "gripper_close": "",
+  "close_gripper": "",
+
+  "home": "",
+  "status": ""
+}
