@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.Data.Sqlite;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(builder.Configuration["Urls"] ?? "http://0.0.0.0:5080");
@@ -18,8 +19,10 @@ builder.Services.AddHttpClient("ollama", client =>
     client.Timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 10, 300));
 });
 builder.Services.AddSingleton<RobotSerialService>();
+builder.Services.AddSingleton<PoseService>();
 
 var app = builder.Build();
+app.Services.GetRequiredService<PoseService>().EnsureCreated();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -355,6 +358,74 @@ app.MapPost("/api/command", async (CommandRequest request, IConfiguration config
     }
 });
 
+// ---- Saved poses (SQLite) ----
+// A pose is a name plus one fixed angle per axis, entered manually. Angles are
+// validated against the same per-axis limits as every other command.
+
+app.MapGet("/api/poses", (PoseService poses) => Results.Ok(poses.List()));
+
+app.MapPost("/api/poses", (PoseRequest request, IConfiguration config, PoseService poses) =>
+{
+    var name = (request.Name ?? string.Empty).Trim();
+    if (name.Length == 0 || name.Length > 40)
+        return Results.BadRequest(new { messageAr = "أدخل اسمًا للوضعية (حتى 40 حرفًا)." });
+
+    var robot = config.GetSection("Robot");
+    var (wMin, wMax) = (robot.GetValue<int>("WristMinAngle", 10), robot.GetValue<int>("WristMaxAngle", 170));
+    var (eMin, eMax) = (robot.GetValue<int>("ElbowMinAngle", 10), robot.GetValue<int>("ElbowMaxAngle", 170));
+    var (gMin, gMax) = (robot.GetValue<int>("GripperMinAngle", 100), robot.GetValue<int>("GripperMaxAngle", 170));
+
+    if (request.Wrist < wMin || request.Wrist > wMax)
+        return Results.BadRequest(new { messageAr = $"زاوية المعصم يجب أن تكون بين {wMin} و{wMax}." });
+    if (request.Elbow < eMin || request.Elbow > eMax)
+        return Results.BadRequest(new { messageAr = $"زاوية الكوع يجب أن تكون بين {eMin} و{eMax}." });
+    if (request.Gripper < gMin || request.Gripper > gMax)
+        return Results.BadRequest(new { messageAr = $"زاوية اليد يجب أن تكون بين {gMin} و{gMax}." });
+
+    try
+    {
+        var pose = poses.Add(name, request.Wrist, request.Elbow, request.Gripper);
+        return Results.Ok(new { messageAr = $"تم حفظ الوضعية \"{name}\".", pose });
+    }
+    catch (SqliteException ex) when (ex.SqliteErrorCode == 19)  // UNIQUE constraint
+    {
+        return Results.Conflict(new { messageAr = "يوجد وضعية بنفس الاسم. اختر اسمًا آخر." });
+    }
+});
+
+app.MapDelete("/api/poses/{id:int}", (int id, PoseService poses) =>
+{
+    var removed = poses.Delete(id);
+    return removed
+        ? Results.Ok(new { messageAr = "تم حذف الوضعية." })
+        : Results.NotFound(new { messageAr = "الوضعية غير موجودة." });
+});
+
+app.MapPost("/api/poses/{id:int}/play", async (int id, PoseService poses, RobotSerialService serial, CancellationToken ct) =>
+{
+    var pose = poses.Get(id);
+    if (pose is null)
+        return Results.NotFound(new { messageAr = "الوضعية غير موجودة." });
+
+    if (!serial.GetStatus().Connected)
+        return Results.Conflict(new { messageAr = "لا يوجد اتصال بالـ NodeMCU؛ لم تُرسل الوضعية." });
+
+    var lines = new[] { $"w {pose.Wrist}", $"e {pose.Elbow}", $"g {pose.Gripper}" };
+    try
+    {
+        foreach (var line in lines)
+        {
+            await serial.SendLineAsync(line, ct);
+            await Task.Delay(40, ct);
+        }
+        return Results.Ok(new { messageAr = $"تشغيل الوضعية \"{pose.Name}\".", serialLines = lines });
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {
+        return Results.Problem(title: "Serial write failed", detail: $"تعذر إرسال الوضعية: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+});
+
 app.Run();
 
 static string ExtractJsonObject(string input)
@@ -507,6 +578,8 @@ public sealed record ConnectRequest(string? PortName);
 public sealed record InterpretRequest(string? Transcript);
 public sealed record ExecuteRequest(string? PendingId);
 public sealed record CommandRequest(string? Action);
+public sealed record PoseRequest(string? Name, int Wrist, int Elbow, int Gripper);
+public sealed record Pose(int Id, string Name, int Wrist, int Elbow, int Gripper, string CreatedAt);
 public sealed record SerialStatus(bool Connected, string? PortName, int BaudRate, string LastDeviceMessage);
 public sealed record PendingCommand(List<string> SerialLines, string Intent, DateTimeOffset ExpiresAt);
 public sealed record InterpretResponse(Guid? PendingId, string Transcript, string Intent, int? Angle, string MessageAr, IReadOnlyList<string> SerialLines);
@@ -518,4 +591,90 @@ public sealed class IntentResult
 
     [JsonPropertyName("angle")]
     public int? Angle { get; set; }
+}
+
+// Stores named poses in a local SQLite file next to the app. Local-only, no server.
+public sealed class PoseService
+{
+    private readonly string _connectionString;
+
+    public PoseService(IConfiguration config)
+    {
+        var path = config["Robot:PosesDbPath"];
+        if (string.IsNullOrWhiteSpace(path))
+            path = Path.Combine(AppContext.BaseDirectory, "poses.db");
+        _connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
+    }
+
+    public void EnsureCreated()
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "CREATE TABLE IF NOT EXISTS Poses (" +
+            "Id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+            "Name TEXT NOT NULL UNIQUE, " +
+            "Wrist INTEGER NOT NULL, " +
+            "Elbow INTEGER NOT NULL, " +
+            "Gripper INTEGER NOT NULL, " +
+            "CreatedAt TEXT NOT NULL);";
+        cmd.ExecuteNonQuery();
+    }
+
+    public List<Pose> List()
+    {
+        var result = new List<Pose>();
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id, Name, Wrist, Elbow, Gripper, CreatedAt FROM Poses ORDER BY Name;";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            result.Add(ReadPose(reader));
+        return result;
+    }
+
+    public Pose? Get(int id)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT Id, Name, Wrist, Elbow, Gripper, CreatedAt FROM Poses WHERE Id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadPose(reader) : null;
+    }
+
+    public Pose Add(string name, int wrist, int elbow, int gripper)
+    {
+        var createdAt = DateTimeOffset.UtcNow.ToString("o");
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "INSERT INTO Poses (Name, Wrist, Elbow, Gripper, CreatedAt) " +
+            "VALUES ($name, $w, $e, $g, $c); SELECT last_insert_rowid();";
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.Parameters.AddWithValue("$w", wrist);
+        cmd.Parameters.AddWithValue("$e", elbow);
+        cmd.Parameters.AddWithValue("$g", gripper);
+        cmd.Parameters.AddWithValue("$c", createdAt);
+        var id = (long)(cmd.ExecuteScalar() ?? 0L);
+        return new Pose((int)id, name, wrist, elbow, gripper, createdAt);
+    }
+
+    public bool Delete(int id)
+    {
+        using var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM Poses WHERE Id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        return cmd.ExecuteNonQuery() > 0;
+    }
+
+    private static Pose ReadPose(SqliteDataReader reader) => new(
+        reader.GetInt32(0), reader.GetString(1), reader.GetInt32(2),
+        reader.GetInt32(3), reader.GetInt32(4), reader.GetString(5));
 }
