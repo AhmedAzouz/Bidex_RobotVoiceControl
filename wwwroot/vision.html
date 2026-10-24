@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <title>الرؤية — Bidex</title>
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#141d31; --panel2:#1b2740; --line:#2e3b55;
+      --text:#eef3ff; --muted:#a6b3cc; --green:#57d9a3; --greenDark:#168553;
+      --blue:#60a5fa; --red:#f87171; --amber:#ffb86b;
+      color-scheme:dark;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{margin:0;background:radial-gradient(900px 500px at 80% -10%,#1d3358 0%,var(--bg) 55%);
+      color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;min-height:100dvh}
+    .app{max-width:720px;margin:0 auto;padding:10px 14px 24px}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px}
+    .iconbtn{min-width:42px;height:42px;border-radius:11px;border:0.5px solid var(--line);background:var(--panel);
+      color:var(--text);font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;
+      cursor:pointer;text-decoration:none;padding:0 12px;gap:6px}
+    .brand{font-size:15px;font-weight:600}
+    .conn{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+    .dot{width:9px;height:9px;border-radius:50%;background:#64748b}
+    .dot.on{background:var(--green);box-shadow:0 0 10px #57d9a366}
+
+    .videoWrap{position:relative;width:100%;aspect-ratio:4/3;margin-top:12px;border-radius:16px;overflow:hidden;
+      background:#0c1425;border:0.5px solid var(--line);transform:scaleX(-1)}
+    .videoWrap video,.videoWrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    .camHint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      color:var(--muted);font-size:13px;text-align:center;padding:0 20px;transform:scaleX(-1)}
+
+    .gesture{margin-top:12px;background:var(--panel);border:0.5px solid var(--line);border-radius:14px;
+      padding:16px;text-align:center}
+    .gesture .big{font-size:26px;font-weight:700;color:var(--green)}
+    .gesture .cmd{font-size:13px;color:var(--muted);margin-top:4px}
+
+    .controls{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+    .btn{width:100%;border:0.5px solid var(--line);border-radius:12px;background:var(--panel2);color:var(--text);
+      padding:14px;font-size:15px;font-weight:600;cursor:pointer}
+    .btn.primary{background:var(--greenDark);border-color:#2c9d84}
+    .btn.stop{background:#3a2330;color:var(--amber)}
+    .btn:active{transform:scale(.99)}
+    label.key{display:block;color:var(--muted);font-size:12px;margin:2px 0 5px}
+    input{width:100%;border-radius:10px;border:0.5px solid var(--line);background:#0c1425;color:var(--text);padding:11px;font:inherit}
+    .toggle{display:flex;align-items:center;gap:9px;color:var(--text);font-size:14px;padding:6px 2px}
+    .toggle input{width:20px;height:20px;flex:0 0 auto}
+    .status{padding:10px 12px;background:#0c1425;border:0.5px solid var(--line);border-radius:10px;color:var(--muted);
+      font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+    .status.good{color:var(--green);border-color:#226947}
+    .status.bad{color:#fecaca;border-color:#7f3341}
+
+    .legend{margin-top:16px;display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+    .leg{display:flex;align-items:center;gap:8px;background:var(--panel);border:0.5px solid var(--line);
+      border-radius:10px;padding:8px 10px;font-size:12.5px}
+    .leg b{display:inline-flex;width:22px;height:22px;flex:0 0 auto;border-radius:6px;background:var(--panel2);
+      align-items:center;justify-content:center;font-size:12px;color:var(--green)}
+    .note{font-size:11.5px;color:var(--muted);line-height:1.7;margin-top:14px}
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <a class="iconbtn" href="index.html">‹ رجوع</a>
+    <span class="brand">الرؤية</span>
+    <span class="conn"><span class="dot" id="camDot"></span><span id="camLabel">الكاميرا متوقفة</span></span>
+  </div>
+
+  <div class="videoWrap" id="videoWrap">
+    <video id="video" playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div class="camHint" id="camHint">اضغط «تشغيل الكاميرا» وارفع يدك أمامها</div>
+  </div>
+
+  <div class="gesture">
+    <div class="big" id="gBig">—</div>
+    <div class="cmd" id="gCmd">لا توجد يد</div>
+  </div>
+
+  <div class="controls">
+    <div>
+      <label class="key" for="accessKey">مفتاح التحكم</label>
+      <input id="accessKey" type="password" autocomplete="off" placeholder="من appsettings.json">
+    </div>
+
+    <button class="btn primary" id="startBtn">تشغيل الكاميرا</button>
+    <button class="btn stop" id="stopBtn" style="display:none">إيقاف الكاميرا</button>
+
+    <div class="toggle">
+      <input type="checkbox" id="execOn">
+      <label for="execOn" style="margin:0">تنفيذ الأوامر على الروبوت</label>
+    </div>
+
+    <div class="status" id="status">جاهز. فعّل التنفيذ بعد التأكد من المعايرة.</div>
+  </div>
+
+  <div class="legend">
+    <div class="leg"><b>0</b> قبضة ← اغلق اليد</div>
+    <div class="leg"><b>1</b> إصبع ← البداية</div>
+    <div class="leg"><b>2</b> إصبعان ← الكوع</div>
+    <div class="leg"><b>3</b> ثلاثة ← المعصم</div>
+    <div class="leg"><b>4</b> أربعة ← عشوائي</div>
+    <div class="leg"><b>5</b> كف مفتوح ← افتح اليد</div>
+  </div>
+
+  <p class="note">
+    رفع اليد من أمام الكاميرا يرسل «إيقاف». يُرسل الأمر مرة واحدة فقط عند تغيّر الإيماءة.
+    يجب أن تكون الكاميرا مسموحة، وأن تُفتح الصفحة على اللاب توب (localhost) لأن المتصفح يمنع الكاميرا على http غير الآمن.
+    هذا الإيقاف البرمجي لا يُغني عن مفتاح فصل الطاقة الفيزيائي للطوارئ.
+  </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  const ACTION_MAP = { 0:'gripper_close', 1:'home', 2:'elbow_test', 3:'wrist_test', 4:'random_start', 5:'gripper_open' };
+  const NAME_AR = {
+    gripper_close:'اغلق اليد', home:'البداية', elbow_test:'الكوع',
+    wrist_test:'المعصم', random_start:'عشوائي', gripper_open:'افتح اليد', random_stop:'إيقاف'
+  };
+  const GESTURE_AR = { 0:'قبضة', 1:'إصبع واحد', 2:'إصبعان', 3:'ثلاثة أصابع', 4:'أربعة أصابع', 5:'كف مفتوح', none:'لا توجد يد' };
+
+  const STABLE_FRAMES = 5;      // ثبات الإيماءة قبل قبولها
+  const NONE_FRAMES   = 12;     // اختفاء اليد يحتاج ثباتًا أطول قبل «إيقاف»
+  const MIN_INTERVAL  = 350;    // أقل فاصل بين أمرين (ms)
+
+  let hands = null, camera = null, running = false, busy = false;
+  let candidate = null, candCount = 0, accepted = null, lastSent = null, lastSendAt = 0;
+
+  // ---- مفتاح التحكم: حفظ محلي للراحة ----
+  try { const k = localStorage.getItem('bidex_key'); if (k) $('accessKey').value = k; } catch {}
+  $('accessKey').addEventListener('change', () => { try { localStorage.setItem('bidex_key', $('accessKey').value.trim()); } catch {} });
+
+  function setStatus(text, kind=''){ const n=$('status'); n.textContent=text; n.className='status'+(kind?' '+kind:''); }
+  function setCam(on){ $('camDot').classList.toggle('on',on); $('camLabel').textContent = on?'الكاميرا تعمل':'الكاميرا متوقفة'; }
+  function showGesture(g){
+    $('gBig').textContent = GESTURE_AR[g] ?? '—';
+    if (g === 'none'){ $('gCmd').textContent = 'رفع اليد ← إيقاف'; }
+    else { const a = ACTION_MAP[g]; $('gCmd').textContent = a ? ('الأمر: ' + NAME_AR[a]) : '—'; }
+  }
+
+  // ---- استدعاء الخادم: نفس نمط الصفحة الرئيسية ----
+  async function sendCommand(action){
+    const key = $('accessKey').value.trim();
+    if (!key){ setStatus('أدخل مفتاح التحكم أولًا.', 'bad'); return; }
+    busy = true;
+    try {
+      const r = await fetch('/api/command', {
+        method:'POST',
+        headers:{ 'X-Robot-Key':key, 'Content-Type':'application/json' },
+        body: JSON.stringify({ action }),
+        cache:'no-store'
+      });
+      let data={}; try{ data = await r.json(); }catch{}
+      if(!r.ok) throw new Error(data.messageAr || data.title || ('HTTP '+r.status));
+      setStatus('أُرسل: ' + (NAME_AR[action]||action) + ' — ' + (data.messageAr||'تم'), 'good');
+    } catch(e){
+      setStatus('خطأ: ' + e.message, 'bad');
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ---- كشف عدد الأصابع الممدودة من 21 معلمًا ----
+  // إصبع ممدود إذا كان طرفه أبعد عن المعصم (0) من مفصله الأوسط.
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy); }
+  function countFingers(lm){
+    const wrist = lm[0];
+    const pairs = [ [4,2], [8,6], [12,10], [16,14], [20,18] ]; // tip, pip لكل إصبع (الأول الإبهام)
+    let count = 0;
+    for (const [tip,pip] of pairs){
+      if (dist(lm[tip], wrist) > dist(lm[pip], wrist) * 1.12) count++;
+    }
+    return count; // 0..5
+  }
+
+  // ---- معالجة كل إطار ----
+  function onResults(res){
+    const cv = $('canvas'), ctx = cv.getContext('2d');
+    if (cv.width !== (res.image?.width||640)) { cv.width = res.image?.width||640; cv.height = res.image?.height||480; }
+    ctx.clearRect(0,0,cv.width,cv.height);
+
+    let gesture = 'none';
+    const hasHand = res.multiHandLandmarks && res.multiHandLandmarks.length > 0;
+    if (hasHand){
+      const lm = res.multiHandLandmarks[0];
+      if (window.drawConnectors && window.HAND_CONNECTIONS)
+        drawConnectors(ctx, lm, HAND_CONNECTIONS, { color:'#57d9a3', lineWidth:3 });
+      if (window.drawLandmarks)
+        drawLandmarks(ctx, lm, { color:'#57d9a3', fillColor:'#57d9a3', radius:3 });
+      gesture = countFingers(lm); // 0..5
+    }
+
+    // ثبات الإيماءة
+    const need = (gesture === 'none') ? NONE_FRAMES : STABLE_FRAMES;
+    if (gesture === candidate){ candCount++; }
+    else { candidate = gesture; candCount = 1; }
+
+    if (candCount === need && accepted !== candidate){
+      accepted = candidate;
+      showGesture(accepted);
+      maybeSend(accepted);
+    } else if (candCount < need && accepted === null){
+      showGesture(gesture); // عرض فوري أول مرة فقط
+    }
+  }
+
+  function maybeSend(g){
+    if (!$('execOn').checked) return;          // التنفيذ مُطفأ = عرض فقط
+    const action = (g === 'none') ? 'random_stop' : ACTION_MAP[g];
+    if (!action) return;
+    if (action === lastSent) return;           // فقط عند التغيّر
+    if (busy) return;
+    const now = Date.now();
+    if (now - lastSendAt < MIN_INTERVAL) return;
+    lastSent = action; lastSendAt = now;
+    sendCommand(action);
+  }
+
+  // ---- تشغيل / إيقاف الكاميرا ----
+  async function startCamera(){
+    if (running) return;
+    if (typeof Hands === 'undefined'){ setStatus('تعذّر تحميل مكتبة الرؤية (تحقق من الإنترنت أول مرة).', 'bad'); return; }
+    setStatus('يشغّل الكاميرا…');
+    try {
+      hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+      hands.setOptions({ maxNumHands:1, modelComplexity:1, minDetectionConfidence:0.6, minTrackingConfidence:0.6 });
+      hands.onResults(onResults);
+
+      camera = new Camera($('video'), {
+        onFrame: async () => { if (hands) await hands.send({ image: $('video') }); },
+        width: 640, height: 480
+      });
+      await camera.start();
+
+      running = true;
+      accepted = null; lastSent = null; candidate = null; candCount = 0;
+      $('camHint').style.display = 'none';
+      $('startBtn').style.display = 'none';
+      $('stopBtn').style.display = 'block';
+      setCam(true);
+      setStatus($('execOn').checked ? 'يعمل — التنفيذ مُفعّل.' : 'يعمل — العرض فقط (فعّل التنفيذ عند الجاهزية).', 'good');
+    } catch(e){
+      setStatus('تعذّر فتح الكاميرا: ' + e.message + ' — تأكد من الصلاحية وأن الصفحة على localhost.', 'bad');
+    }
+  }
+
+  function stopCamera(){
+    running = false;
+    try { if (camera) camera.stop(); } catch {}
+    try { const s = $('video').srcObject; if (s) s.getTracks().forEach(t => t.stop()); $('video').srcObject = null; } catch {}
+    camera = null; hands = null;
+    const cv = $('canvas'); cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+    $('camHint').style.display = 'flex';
+    $('startBtn').style.display = 'block';
+    $('stopBtn').style.display = 'none';
+    $('gBig').textContent = '—'; $('gCmd').textContent = 'لا توجد يد';
+    setCam(false);
+    setStatus('الكاميرا متوقفة.');
+  }
+
+  $('startBtn').addEventListener('click', startCamera);
+  $('stopBtn').addEventListener('click', stopCamera);
+  $('execOn').addEventListener('change', () => {
+    if (running) setStatus($('execOn').checked ? 'التنفيذ مُفعّل الآن.' : 'التنفيذ مُطفأ — عرض فقط.', 'good');
+    lastSent = null; // أعد تقييم أول إيماءة بعد التبديل
+  });
+})();
+</script>
+</body>
+</html>
