@@ -1,328 +1,574 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111827">
-  <title>مساعد الروبوت الصوتي</title>
-  <style>
-    :root { color-scheme: dark; --bg:#0b1020; --panel:#141d31; --panel2:#1b2740; --line:#2e3b55; --text:#eef3ff; --muted:#a6b3cc; --green:#4ade80; --blue:#60a5fa; --red:#f87171; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:radial-gradient(1100px 650px at 80% -10%, #1d3358 0%, var(--bg) 55%); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif; min-height:100vh; }
-    main { max-width:900px; margin:0 auto; padding:24px 16px 42px; }
-    header { margin-bottom:20px; }
-    .eyebrow { color:var(--green); font-size:13px; letter-spacing:.04em; font-weight:700; }
-    h1 { font-size:clamp(25px,5vw,38px); margin:6px 0 8px; }
-    p { color:var(--muted); line-height:1.7; margin:6px 0; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-    .card { border:1px solid var(--line); background:rgba(20,29,49,.94); border-radius:18px; padding:17px; box-shadow:0 12px 28px rgba(0,0,0,.16); min-width:0; }
-    .card h2 { font-size:17px; margin:0 0 13px; }
-    label { display:block; color:var(--muted); font-size:13px; margin:11px 0 6px; }
-    input, select, button { width:100%; border-radius:11px; border:1px solid var(--line); padding:12px; font:inherit; }
-    input, select { background:#0c1425; color:var(--text); }
-    button { background:#263653; color:var(--text); font-weight:700; cursor:pointer; transition:filter .15s,transform .15s; }
-    button:hover { filter:brightness(1.15); }
-    button:active { transform:scale(.99); }
-    button:disabled { opacity:.5; cursor:not-allowed; }
-    .primary { background:linear-gradient(135deg,#168553,#166b8f); border-color:#2c9d84; }
-    .mic { width:100%; min-height:92px; display:flex; align-items:center; justify-content:center; gap:11px; font-size:20px; border-radius:15px; margin-top:12px; }
-    .mic.listening { background:#922f45; border-color:#f87171; animation:pulse 1.3s infinite; }
-    @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 #f8717133; } 50% { box-shadow:0 0 0 8px #f8717100; } }
-    .status { padding:10px 12px; background:#0c1425; border:1px solid var(--line); border-radius:11px; margin-top:12px; color:var(--muted); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
-    .status.good { color:var(--green); border-color:#226947; }
-    .status.bad { color:#fecaca; border-color:#7f3341; }
-    .row { display:flex; align-items:center; gap:9px; }
-    .row > * { flex:1; }
-    .pill { display:inline-flex; align-items:center; gap:7px; font-size:12px; padding:6px 9px; border-radius:999px; background:#0c1425; border:1px solid var(--line); color:var(--muted); margin:0 0 8px 5px; }
-    .dot { width:7px; height:7px; display:inline-block; border-radius:50%; background:#64748b; }
-    .dot.on { background:var(--green); box-shadow:0 0 10px #4ade8066; }
-    .preview { min-height:88px; background:#0c1425; border-radius:12px; border:1px solid var(--line); padding:13px; margin-top:12px; line-height:1.7; overflow-wrap:anywhere; }
-    .preview strong { color:var(--green); }
-    .commands { display:flex; gap:7px; flex-wrap:wrap; margin-top:12px; }
-    .commands button { width:auto; flex:1 1 110px; padding:9px; font-size:13px; }
-    .toggle { display:flex; align-items:center; gap:9px; margin:13px 0 2px; color:var(--text); font-size:14px; }
-    .toggle input { width:18px; height:18px; accent-color:var(--green); }
-    .toggle label { margin:0; color:var(--text); }
-    .small { font-size:12px; }
-    .span2 { grid-column:1 / -1; }
-    footer { margin-top:15px; text-align:center; color:var(--muted); font-size:12px; }
-    @media (max-width:680px) { main { padding:16px 12px 28px; } .grid { grid-template-columns:1fr; } .span2 { grid-column:auto; } .card { padding:14px; } }
-  </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111827">
+    <title>مساعد الروبوت الصوتي</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0b1020;
+            --panel: #141d31;
+            --panel2: #1b2740;
+            --line: #2e3b55;
+            --text: #eef3ff;
+            --muted: #a6b3cc;
+            --green: #4ade80;
+            --blue: #60a5fa;
+            --red: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(1100px 650px at 80% -10%, #1d3358 0%, var(--bg) 55%);
+            color: var(--text);
+            font-family: system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;
+            min-height: 100vh;
+        }
+
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 24px 16px 42px;
+        }
+
+        header {
+            margin-bottom: 20px;
+        }
+
+        .eyebrow {
+            color: var(--green);
+            font-size: 13px;
+            letter-spacing: .04em;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: clamp(25px,5vw,38px);
+            margin: 6px 0 8px;
+        }
+
+        p {
+            color: var(--muted);
+            line-height: 1.7;
+            margin: 6px 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            background: rgba(20,29,49,.94);
+            border-radius: 18px;
+            padding: 17px;
+            box-shadow: 0 12px 28px rgba(0,0,0,.16);
+            min-width: 0;
+        }
+
+            .card h2 {
+                font-size: 17px;
+                margin: 0 0 13px;
+            }
+
+        label {
+            display: block;
+            color: var(--muted);
+            font-size: 13px;
+            margin: 11px 0 6px;
+        }
+
+        input, select, button {
+            width: 100%;
+            border-radius: 11px;
+            border: 1px solid var(--line);
+            padding: 12px;
+            font: inherit;
+        }
+
+        input, select {
+            background: #0c1425;
+            color: var(--text);
+        }
+
+        button {
+            background: #263653;
+            color: var(--text);
+            font-weight: 700;
+            cursor: pointer;
+            transition: filter .15s,transform .15s;
+        }
+
+            button:hover {
+                filter: brightness(1.15);
+            }
+
+            button:active {
+                transform: scale(.99);
+            }
+
+            button:disabled {
+                opacity: .5;
+                cursor: not-allowed;
+            }
+
+        .primary {
+            background: linear-gradient(135deg,#168553,#166b8f);
+            border-color: #2c9d84;
+        }
+
+        .mic {
+            width: 100%;
+            min-height: 92px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 11px;
+            font-size: 20px;
+            border-radius: 15px;
+            margin-top: 12px;
+        }
+
+            .mic.listening {
+                background: #922f45;
+                border-color: #f87171;
+                animation: pulse 1.3s infinite;
+            }
+
+        @keyframes pulse {
+            0%,100% {
+                box-shadow: 0 0 0 0 #f8717133;
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px #f8717100;
+            }
+        }
+
+        .status {
+            padding: 10px 12px;
+            background: #0c1425;
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+        }
+
+            .status.good {
+                color: var(--green);
+                border-color: #226947;
+            }
+
+            .status.bad {
+                color: #fecaca;
+                border-color: #7f3341;
+            }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+            .row > * {
+                flex: 1;
+            }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12px;
+            padding: 6px 9px;
+            border-radius: 999px;
+            background: #0c1425;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            margin: 0 0 8px 5px;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            display: inline-block;
+            border-radius: 50%;
+            background: #64748b;
+        }
+
+            .dot.on {
+                background: var(--green);
+                box-shadow: 0 0 10px #4ade8066;
+            }
+
+        .preview {
+            min-height: 88px;
+            background: #0c1425;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            padding: 13px;
+            margin-top: 12px;
+            line-height: 1.7;
+            overflow-wrap: anywhere;
+        }
+
+            .preview strong {
+                color: var(--green);
+            }
+
+        .commands {
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+            .commands button {
+                width: auto;
+                flex: 1 1 110px;
+                padding: 9px;
+                font-size: 13px;
+            }
+
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin: 13px 0 2px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+            .toggle input {
+                width: 18px;
+                height: 18px;
+                accent-color: var(--green);
+            }
+
+            .toggle label {
+                margin: 0;
+                color: var(--text);
+            }
+
+        .small {
+            font-size: 12px;
+        }
+
+        .span2 {
+            grid-column: 1 / -1;
+        }
+
+        footer {
+            margin-top: 15px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width:680px) {
+            main {
+                padding: 16px 12px 28px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .span2 {
+                grid-column: auto;
+            }
+
+            .card {
+                padding: 14px;
+            }
+        }
+    </style>
 </head>
 <body>
-<main>
-  <header>
-    <div class="eyebrow">LOCAL AI · OLLAMA · NODEMCU</div>
-    <h1>🤖 مساعد الروبوت الصوتي</h1>
-    <p>تحدث بالعربية، راجع الأمر الذي فهمه Qwen، ثم نفّذه على الروبوت. نغمات الشخصية يصدرها buzzer المتصل بـ D5.</p>
-    <div>
-      <span class="pill"><span class="dot" id="serverDot"></span><span id="serverLabel">الخادم غير مفحوص</span></span>
-      <span class="pill"><span class="dot" id="serialDot"></span><span id="serialLabel">USB غير متصل</span></span>
-      <span class="pill">الموديل: <b>qwen3:8b</b></span>
-    </div>
-  </header>
+    <main>
+        <header>
+            <div class="eyebrow">LOCAL AI · OLLAMA · NODEMCU</div>
+            <h1>🤖 مساعد الروبوت الصوتي</h1>
+            <p>تحدث بالعربية، راجع الأمر الذي فهمه Qwen، ثم نفّذه على الروبوت. نغمات الشخصية يصدرها buzzer المتصل بـ D5.</p>
+            <div>
+                <span class="pill"><span class="dot" id="serverDot"></span><span id="serverLabel">الخادم غير مفحوص</span></span>
+                <span class="pill"><span class="dot" id="serialDot"></span><span id="serialLabel">USB غير متصل</span></span>
+                <span class="pill">الموديل: <b>qwen3:8b</b></span>
+            </div>
+        </header>
 
-  <div class="grid">
-    <section class="card">
-      <h2>١. الاتصال بالروبوت</h2>
-      <label for="accessKey">مفتاح التحكم (من appsettings.json)</label>
-      <input id="accessKey" type="password" autocomplete="off" placeholder="أدخل مفتاح التحكم" 
-             value="">
-      <div class="row">
-        <div>
-          <label for="portSelect">منفذ USB Serial</label>
-          <select id="portSelect"><option value="">اضغط تحديث المنافذ</option></select>
+        <div class="grid">
+            <section class="card">
+                <h2>١. الاتصال بالروبوت</h2>
+                <label for="accessKey">مفتاح التحكم (من appsettings.json)</label>
+                <input id="accessKey" type="password" autocomplete="off" placeholder="أدخل مفتاح التحكم"
+                       value="">
+                <div class="row">
+                    <div>
+                        <label for="portSelect">منفذ USB Serial</label>
+                        <select id="portSelect"><option value="">اضغط تحديث المنافذ</option></select>
+                    </div>
+                    <div style="flex:0 0 105px;align-self:end">
+                        <button id="refreshPorts">تحديث</button>
+                    </div>
+                </div>
+                <div class="row" style="margin-top:9px">
+                    <button class="primary" id="connectBtn">اتصال</button>
+                    <button id="disconnectBtn">فصل الاتصال</button>
+                </div>
+                <div class="status" id="serialStatus">اختر منفذ الـ NodeMCU الصحيح. أغلق Serial Monitor في Arduino IDE قبل الاتصال.</div>
+                <div class="status" id="deviceMessage">رسالة الجهاز: لا توجد بيانات بعد.</div>
+            </section>
+
+            <section class="card">
+                <h2>٢. تحدث إلى الروبوت</h2>
+                <label for="speechLang">لغة التعرف على الكلام</label>
+                <select id="speechLang">
+                    <option value="ar-SA" selected>العربية — السعودية</option>
+                    <option value="ar-EG">العربية — مصر</option>
+                    <option value="en-US">English — US</option>
+                </select>
+                <button class="mic primary" id="micBtn"><span style="font-size:30px">🎙️</span><span id="micLabel">اضغط وتحدث</span></button>
+                <div class="status" id="speechStatus">التعرف على الكلام يعتمد على دعم المتصفح وقد يحتاج إلى الإنترنت. استخدم Chrome على Android كبداية.</div>
+                <label for="manualText">أو اكتب الأمر للاختبار</label>
+                <div class="row">
+                    <input id="manualText" type="text" placeholder="مثال: حرّك المعصم إلى 120 درجة" style="min-width:0">
+                    <button id="interpretBtn" style="flex:0 0 100px">فهم الأمر</button>
+                </div>
+            </section>
+
+            <section class="card span2">
+                <h2>٣. تأكيد الأمر</h2>
+                <div class="preview" id="preview"><span style="color:var(--muted)">سيظهر هنا النص الذي تعرف عليه الميكروفون، ثم الأمر الذي فهمه Ollama. لن يتحرك الروبوت قبل التنفيذ، إلا إذا فعّلت التنفيذ التلقائي.</span></div>
+                <div class="toggle">
+                    <input type="checkbox" id="autoExecute">
+                    <label for="autoExecute">تنفيذ تلقائي بعد فهم الأمر (بدون تأكيد يدوي)</label>
+                </div>
+                <p class="small">لأول تجربة، اترك هذا الخيار مغلقًا. أوامر الزوايا والأوامر المسموحة فقط هي التي يمكن إرسالها.</p>
+                <button class="primary" id="executeBtn" disabled style="margin-top:10px">نفّذ الأمر على الروبوت</button>
+                <div class="status" id="actionStatus">بانتظار أمر.</div>
+                <div class="commands">
+                    <button data-text="حرّك المعصم إلى 120 درجة">اختبار المعصم</button>
+                    <button data-text="حرّك الكوع إلى 120 درجة">اختبار الكوع</button>
+                    <button data-text="افتح اليد">افتح اليد</button>
+                    <button data-text="اقفل اليد">اقفل اليد</button>
+                    <button data-text="ارجع إلى وضع البداية">وضع البداية</button>
+                    <button data-text="أوقف الحركة العشوائية">إيقاف عشوائي</button>
+                </div>
+            </section>
         </div>
-        <div style="flex:0 0 105px;align-self:end">
-          <button id="refreshPorts">تحديث</button>
-        </div>
-      </div>
-      <div class="row" style="margin-top:9px">
-        <button class="primary" id="connectBtn">اتصال</button>
-        <button id="disconnectBtn">فصل الاتصال</button>
-      </div>
-      <div class="status" id="serialStatus">اختر منفذ الـ NodeMCU الصحيح. أغلق Serial Monitor في Arduino IDE قبل الاتصال.</div>
-      <div class="status" id="deviceMessage">رسالة الجهاز: لا توجد بيانات بعد.</div>
-    </section>
+        <footer>التعرف على الصوت قد يستخدم خدمة سحابية يوفرها المتصفح. Ollama والتصنيف والتحكم التسلسلي تعمل على الكمبيوتر المحلي.</footer>
+    </main>
+    <script>
+        (() => {
+            const $ = id => document.getElementById(id);
+            let pendingId = null;
+            let recognition = null;
+            let listening = false;
 
-    <section class="card">
-      <h2>٢. تحدث إلى الروبوت</h2>
-      <label for="speechLang">لغة التعرف على الكلام</label>
-      <select id="speechLang">
-        <option value="ar-SA" selected>العربية — السعودية</option>
-        <option value="ar-EG">العربية — مصر</option>
-        <option value="en-US">English — US</option>
-      </select>
-      <button class="mic primary" id="micBtn"><span style="font-size:30px">🎙️</span><span id="micLabel">اضغط وتحدث</span></button>
-      <div class="status" id="speechStatus">التعرف على الكلام يعتمد على دعم المتصفح وقد يحتاج إلى الإنترنت. استخدم Chrome على Android كبداية.</div>
-      <label for="manualText">أو اكتب الأمر للاختبار</label>
-      <div class="row">
-        <input id="manualText" type="text" placeholder="مثال: حرّك المعصم إلى 120 درجة" style="min-width:0">
-        <button id="interpretBtn" style="flex:0 0 100px">فهم الأمر</button>
-      </div>
-    </section>
+            function setStatus(id, text, kind = '') {
+                const node = $(id);
+                node.textContent = text;
+                node.className = 'status' + (kind ? ' ' + kind : '');
+            }
 
-    <section class="card span2">
-      <h2>٣. تأكيد الأمر</h2>
-      <div class="preview" id="preview"><span style="color:var(--muted)">سيظهر هنا النص الذي تعرف عليه الميكروفون، ثم الأمر الذي فهمه Ollama. لن يتحرك الروبوت قبل التنفيذ، إلا إذا فعّلت التنفيذ التلقائي.</span></div>
-      <div class="toggle">
-        <input type="checkbox" id="autoExecute">
-        <label for="autoExecute">تنفيذ تلقائي بعد فهم الأمر (بدون تأكيد يدوي)</label>
-      </div>
-      <p class="small">لأول تجربة، اترك هذا الخيار مغلقًا. أوامر الزوايا والأوامر المسموحة فقط هي التي يمكن إرسالها.</p>
-      <button class="primary" id="executeBtn" disabled style="margin-top:10px">نفّذ الأمر على الروبوت</button>
-      <div class="status" id="actionStatus">بانتظار أمر.</div>
-      <div class="commands">
-        <button data-text="حرّك المعصم إلى 120 درجة">اختبار المعصم</button>
-        <button data-text="افتح الكلّابة">افتح الكلّابة</button>
-        <button data-text="اقفل الكلّابة">اقفل الكلّابة</button>
-        <button data-text="ارجع إلى وضع البداية">وضع البداية</button>
-        <button data-text="أوقف الحركة العشوائية">إيقاف عشوائي</button>
-      </div>
-    </section>
-  </div>
-  <footer>التعرف على الصوت قد يستخدم خدمة سحابية يوفرها المتصفح. Ollama والتصنيف والتحكم التسلسلي تعمل على الكمبيوتر المحلي.</footer>
-</main>
-<script>
-(() => {
-  const $ = id => document.getElementById(id);
-  let pendingId = null;
-  let recognition = null;
-  let listening = false;
+            async function api(path, method = 'GET', body = undefined) {
+                const headers = { 'X-Robot-Key': $('accessKey').value.trim() };
+                if (body !== undefined) headers['Content-Type'] = 'application/json';
+                const response = await fetch(path, {
+                    method, headers,
+                    body: body === undefined ? undefined : JSON.stringify(body),
+                    cache: 'no-store'
+                });
+                let data = {};
+                try { data = await response.json(); } catch { }
+                if (!response.ok) {
+                    const detail = data.messageAr || data.detail || data.title || `HTTP ${response.status}`;
+                    throw new Error(detail);
+                }
+                return data;
+            }
 
-  function setStatus(id, text, kind = '') {
-    const node = $(id);
-    node.textContent = text;
-    node.className = 'status' + (kind ? ' ' + kind : '');
-  }
+            function setPending(data) {
+                pendingId = data.pendingId || null;
+                const executeButton = $('executeBtn');
+                executeButton.disabled = !pendingId;
+                if (!pendingId) {
+                    $('preview').innerHTML = `<span style="color:#fecaca">${escapeHtml(data.messageAr || 'لم يتم التعرف على أمر مسموح.')}</span>`;
+                    setStatus('actionStatus', data.messageAr || 'لم يتم إنشاء أمر للتنفيذ.', 'bad');
+                    return;
+                }
+                const commandLines = (data.serialLines || []).join('  |  ');
+                $('preview').innerHTML = `<div><span style="color:var(--muted)">ما سمعه المتصفح:</span> ${escapeHtml(data.transcript)}</div><div style="margin-top:8px"><strong>${escapeHtml(data.messageAr)}</strong></div><div class="small" style="margin-top:8px;color:var(--muted)">الأمر المسموح: ${escapeHtml(commandLines)}</div>`;
+                setStatus('actionStatus', 'تم فهم الأمر والتحقق منه. لم يُرسل إلى الروبوت بعد.', 'good');
+            }
 
-  async function api(path, method = 'GET', body = undefined) {
-    const headers = { 'X-Robot-Key': $('accessKey').value.trim() };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const response = await fetch(path, {
-      method, headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: 'no-store'
-    });
-    let data = {};
-    try { data = await response.json(); } catch { }
-    if (!response.ok) {
-      const detail = data.messageAr || data.detail || data.title || `HTTP ${response.status}`;
-      throw new Error(detail);
-    }
-    return data;
-  }
+            function escapeHtml(value) {
+                return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            }
 
-  function setPending(data) {
-    pendingId = data.pendingId || null;
-    const executeButton = $('executeBtn');
-    executeButton.disabled = !pendingId;
-    if (!pendingId) {
-      $('preview').innerHTML = `<span style="color:#fecaca">${escapeHtml(data.messageAr || 'لم يتم التعرف على أمر مسموح.')}</span>`;
-      setStatus('actionStatus', data.messageAr || 'لم يتم إنشاء أمر للتنفيذ.', 'bad');
-      return;
-    }
-    const commandLines = (data.serialLines || []).join('  |  ');
-    $('preview').innerHTML = `<div><span style="color:var(--muted)">ما سمعه المتصفح:</span> ${escapeHtml(data.transcript)}</div><div style="margin-top:8px"><strong>${escapeHtml(data.messageAr)}</strong></div><div class="small" style="margin-top:8px;color:var(--muted)">الأمر المسموح: ${escapeHtml(commandLines)}</div>`;
-    setStatus('actionStatus', 'تم فهم الأمر والتحقق منه. لم يُرسل إلى الروبوت بعد.', 'good');
-  }
+            async function interpret(text) {
+                const transcript = String(text || '').trim();
+                if (!transcript) return;
+                $('manualText').value = transcript;
+                $('interpretBtn').disabled = true;
+                $('micBtn').disabled = true;
+                pendingId = null;
+                $('executeBtn').disabled = true;
+                setStatus('actionStatus', 'يرسل النص إلى Ollama لفهم الأمر…');
+                try {
+                    const data = await api('/api/interpret', 'POST', { transcript });
+                    setPending(data);
+                    if (data.pendingId && $('autoExecute').checked) await executePending();
+                } catch (error) {
+                    setStatus('actionStatus', error.message, 'bad');
+                } finally {
+                    $('interpretBtn').disabled = false;
+                    $('micBtn').disabled = false;
+                }
+            }
 
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
+            async function executePending() {
+                if (!pendingId) return;
+                const id = pendingId;
+                pendingId = null;
+                $('executeBtn').disabled = true;
+                setStatus('actionStatus', 'يرسل الأمر إلى NodeMCU عبر USB…');
+                try {
+                    const data = await api('/api/execute', 'POST', { pendingId: id });
+                    setStatus('actionStatus', data.messageAr || 'تم إرسال الأمر.', 'good');
+                    await refreshStatus();
+                } catch (error) {
+                    setStatus('actionStatus', error.message, 'bad');
+                }
+            }
 
-  async function interpret(text) {
-    const transcript = String(text || '').trim();
-    if (!transcript) return;
-    $('manualText').value = transcript;
-    $('interpretBtn').disabled = true;
-    $('micBtn').disabled = true;
-    pendingId = null;
-    $('executeBtn').disabled = true;
-    setStatus('actionStatus', 'يرسل النص إلى Ollama لفهم الأمر…');
-    try {
-      const data = await api('/api/interpret', 'POST', { transcript });
-      setPending(data);
-      if (data.pendingId && $('autoExecute').checked) await executePending();
-    } catch (error) {
-      setStatus('actionStatus', error.message, 'bad');
-    } finally {
-      $('interpretBtn').disabled = false;
-      $('micBtn').disabled = false;
-    }
-  }
+            async function refreshPorts() {
+                try {
+                    const data = await api('/api/ports');
+                    const select = $('portSelect');
+                    const previous = select.value;
+                    select.innerHTML = '';
+                    if (!data.ports.length) {
+                        select.add(new Option('لا توجد منافذ COM', ''));
+                    } else {
+                        select.add(new Option('اختر المنفذ…', ''));
+                        data.ports.forEach(port => select.add(new Option(port, port)));
+                        if (data.ports.includes(previous)) select.value = previous;
+                    }
+                    $('serverDot').classList.add('on');
+                    $('serverLabel').textContent = 'الخادم متصل';
+                    setStatus('serialStatus', 'تم فحص المنافذ. اختر المنفذ الذي يظهر عند توصيل الـ NodeMCU.');
+                    renderSerial(data.serial);
+                } catch (error) {
+                    $('serverDot').classList.remove('on');
+                    $('serverLabel').textContent = 'تعذر الاتصال بالخادم';
+                    setStatus('serialStatus', error.message, 'bad');
+                }
+            }
 
-  async function executePending() {
-    if (!pendingId) return;
-    const id = pendingId;
-    pendingId = null;
-    $('executeBtn').disabled = true;
-    setStatus('actionStatus', 'يرسل الأمر إلى NodeMCU عبر USB…');
-    try {
-      const data = await api('/api/execute', 'POST', { pendingId: id });
-      setStatus('actionStatus', data.messageAr || 'تم إرسال الأمر.', 'good');
-      await refreshStatus();
-    } catch (error) {
-      setStatus('actionStatus', error.message, 'bad');
-    }
-  }
+            function renderSerial(status) {
+                const connected = !!(status && status.connected);
+                $('serialDot').classList.toggle('on', connected);
+                $('serialLabel').textContent = connected ? `USB متصل: ${status.portName}` : 'USB غير متصل';
+                if (status && status.portName) $('portSelect').value = status.portName;
+                if (status && status.lastDeviceMessage) $('deviceMessage').textContent = 'رسالة الجهاز: ' + status.lastDeviceMessage;
+            }
 
-  async function refreshPorts() {
-    try {
-      const data = await api('/api/ports');
-      const select = $('portSelect');
-      const previous = select.value;
-      select.innerHTML = '';
-      if (!data.ports.length) {
-        select.add(new Option('لا توجد منافذ COM', ''));
-      } else {
-        select.add(new Option('اختر المنفذ…', ''));
-        data.ports.forEach(port => select.add(new Option(port, port)));
-        if (data.ports.includes(previous)) select.value = previous;
-      }
-      $('serverDot').classList.add('on');
-      $('serverLabel').textContent = 'الخادم متصل';
-      setStatus('serialStatus', 'تم فحص المنافذ. اختر المنفذ الذي يظهر عند توصيل الـ NodeMCU.');
-      renderSerial(data.serial);
-    } catch (error) {
-      $('serverDot').classList.remove('on');
-      $('serverLabel').textContent = 'تعذر الاتصال بالخادم';
-      setStatus('serialStatus', error.message, 'bad');
-    }
-  }
+            async function refreshStatus() {
+                try {
+                    const status = await api('/api/status');
+                    renderSerial(status);
+                } catch { }
+            }
 
-  function renderSerial(status) {
-    const connected = !!(status && status.connected);
-    $('serialDot').classList.toggle('on', connected);
-    $('serialLabel').textContent = connected ? `USB متصل: ${status.portName}` : 'USB غير متصل';
-    if (status && status.portName) $('portSelect').value = status.portName;
-    if (status && status.lastDeviceMessage) $('deviceMessage').textContent = 'رسالة الجهاز: ' + status.lastDeviceMessage;
-  }
+            function startRecognition() {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    setStatus('speechStatus', 'المتصفح لا يدعم Web Speech Recognition. جرّب Chrome على Android أو استخدم حقل الكتابة للاختبار.', 'bad');
+                    return;
+                }
+                if (listening && recognition) {
+                    recognition.stop();
+                    return;
+                }
+                recognition = new SpeechRecognition();
+                recognition.lang = $('speechLang').value;
+                recognition.continuous = false;
+                recognition.interimResults = true;
+                recognition.maxAlternatives = 1;
+                let finalText = '';
+                recognition.onstart = () => {
+                    listening = true;
+                    $('micBtn').classList.add('listening');
+                    $('micLabel').textContent = 'أستمع إليك… اضغط للإيقاف';
+                    setStatus('speechStatus', 'تحدث الآن بجملة قصيرة وواضحة.');
+                };
+                recognition.onresult = event => {
+                    let interim = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const text = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) finalText += text;
+                        else interim += text;
+                    }
+                    if (interim) setStatus('speechStatus', 'أسمع: ' + interim);
+                    if (finalText.trim()) {
+                        setStatus('speechStatus', 'تم التعرف على الكلام، جارٍ فهم الأمر…', 'good');
+                        recognition.stop();
+                        interpret(finalText.trim());
+                        finalText = '';
+                    }
+                };
+                recognition.onerror = event => {
+                    let message = 'تعذر التعرف على الكلام: ' + event.error;
+                    if (event.error === 'network') message += '. تحقق من اتصال الإنترنت؛ قد يستخدم المتصفح خدمة تعرف سحابية.';
+                    if (event.error === 'not-allowed') message += '. اسمح باستخدام الميكروفون للمتصفح.';
+                    setStatus('speechStatus', message, 'bad');
+                };
+                recognition.onend = () => {
+                    listening = false;
+                    $('micBtn').classList.remove('listening');
+                    $('micLabel').textContent = 'اضغط وتحدث';
+                };
+                try { recognition.start(); }
+                catch (error) { setStatus('speechStatus', 'تعذر بدء الميكروفون: ' + error.message, 'bad'); }
+            }
 
-  async function refreshStatus() {
-    try {
-      const status = await api('/api/status');
-      renderSerial(status);
-    } catch { }
-  }
-
-  function startRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setStatus('speechStatus', 'المتصفح لا يدعم Web Speech Recognition. جرّب Chrome على Android أو استخدم حقل الكتابة للاختبار.', 'bad');
-      return;
-    }
-    if (listening && recognition) {
-      recognition.stop();
-      return;
-    }
-    recognition = new SpeechRecognition();
-    recognition.lang = $('speechLang').value;
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    let finalText = '';
-    recognition.onstart = () => {
-      listening = true;
-      $('micBtn').classList.add('listening');
-      $('micLabel').textContent = 'أستمع إليك… اضغط للإيقاف';
-      setStatus('speechStatus', 'تحدث الآن بجملة قصيرة وواضحة.');
-    };
-    recognition.onresult = event => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalText += text;
-        else interim += text;
-      }
-      if (interim) setStatus('speechStatus', 'أسمع: ' + interim);
-      if (finalText.trim()) {
-        setStatus('speechStatus', 'تم التعرف على الكلام، جارٍ فهم الأمر…', 'good');
-        recognition.stop();
-        interpret(finalText.trim());
-        finalText = '';
-      }
-    };
-    recognition.onerror = event => {
-      let message = 'تعذر التعرف على الكلام: ' + event.error;
-      if (event.error === 'network') message += '. تحقق من اتصال الإنترنت؛ قد يستخدم المتصفح خدمة تعرف سحابية.';
-      if (event.error === 'not-allowed') message += '. اسمح باستخدام الميكروفون للمتصفح.';
-      setStatus('speechStatus', message, 'bad');
-    };
-    recognition.onend = () => {
-      listening = false;
-      $('micBtn').classList.remove('listening');
-      $('micLabel').textContent = 'اضغط وتحدث';
-    };
-    try { recognition.start(); }
-    catch (error) { setStatus('speechStatus', 'تعذر بدء الميكروفون: ' + error.message, 'bad'); }
-  }
-
-  $('refreshPorts').addEventListener('click', refreshPorts);
-  $('connectBtn').addEventListener('click', async () => {
-    try {
-      const portName = $('portSelect').value;
-      const data = await api('/api/connect', 'POST', { portName });
-      setStatus('serialStatus', data.messageAr, 'good');
-      await refreshStatus();
-    } catch (error) { setStatus('serialStatus', error.message, 'bad'); }
-  });
-  $('disconnectBtn').addEventListener('click', async () => {
-    try {
-      const data = await api('/api/disconnect', 'POST', {});
-      setStatus('serialStatus', data.messageAr, 'good');
-      await refreshStatus();
-    } catch (error) { setStatus('serialStatus', error.message, 'bad'); }
-  });
-  $('micBtn').addEventListener('click', startRecognition);
-  $('interpretBtn').addEventListener('click', () => interpret($('manualText').value));
-  $('manualText').addEventListener('keydown', event => { if (event.key === 'Enter') interpret($('manualText').value); });
-  $('executeBtn').addEventListener('click', executePending);
-  document.querySelectorAll('[data-text]').forEach(button => button.addEventListener('click', () => interpret(button.dataset.text)));
-  $('accessKey').addEventListener('change', refreshPorts);
-  refreshPorts();
-  setInterval(refreshStatus, 2500);
-})();
-</script>
+            $('refreshPorts').addEventListener('click', refreshPorts);
+            $('connectBtn').addEventListener('click', async () => {
+                try {
+                    const portName = $('portSelect').value;
+                    const data = await api('/api/connect', 'POST', { portName });
+                    setStatus('serialStatus', data.messageAr, 'good');
+                    await refreshStatus();
+                } catch (error) { setStatus('serialStatus', error.message, 'bad'); }
+            });
+            $('disconnectBtn').addEventListener('click', async () => {
+                try {
+                    const data = await api('/api/disconnect', 'POST', {});
+                    setStatus('serialStatus', data.messageAr, 'good');
+                    await refreshStatus();
+                } catch (error) { setStatus('serialStatus', error.message, 'bad'); }
+            });
+            $('micBtn').addEventListener('click', startRecognition);
+            $('interpretBtn').addEventListener('click', () => interpret($('manualText').value));
+            $('manualText').addEventListener('keydown', event => { if (event.key === 'Enter') interpret($('manualText').value); });
+            $('executeBtn').addEventListener('click', executePending);
+            document.querySelectorAll('[data-text]').forEach(button => button.addEventListener('click', () => interpret(button.dataset.text)));
+            $('accessKey').addEventListener('change', refreshPorts);
+            refreshPorts();
+            setInterval(refreshStatus, 2500);
+        })();
+    </script>
 </body>
 </html>
